@@ -145,12 +145,12 @@
   <div id="auth-modal" class="modal-overlay">
     <div class="modal-card auth-card">
       <button class="modal-close-btn" id="auth-close-btn">✕</button>
-      <h3 id="auth-modal-title" class="auth-title">Log In</h3>
-      <p id="auth-modal-subtitle" class="auth-subtitle">Log in to save watchlists and write reviews</p>
+      <h3 class="auth-title">Log In</h3>
+      <p class="auth-subtitle">Sign in with Google to save watchlists and write reviews</p>
       
       <div id="auth-error" class="error-banner" style="display: none;"></div>
 
-      <!-- Google Sign-In -->
+      <!-- Google Sign-In (only auth method) -->
       <button id="google-signin-btn" class="btn btn-google">
         <svg class="google-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -160,26 +160,6 @@
         </svg>
         Continue with Google
       </button>
-
-      <div class="auth-divider"><span>or</span></div>
-
-      <form id="auth-form">
-        <div class="input-group">
-          <label for="auth-email">Email Address</label>
-          <input type="email" id="auth-email" placeholder="you@example.com" required>
-        </div>
-        <div class="input-group">
-          <label for="auth-password">Password</label>
-          <input type="password" id="auth-password" placeholder="••••••" minlength="6" required>
-        </div>
-        
-        <button type="submit" id="auth-submit-btn" class="btn btn-primary">Log In</button>
-      </form>
-      
-      <div class="auth-toggle-link">
-        <span id="auth-toggle-text">Don't have an account?</span>
-        <a href="#" id="auth-toggle-btn">Sign Up</a>
-      </div>
     </div>
   </div>
 

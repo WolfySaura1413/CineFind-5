@@ -48,17 +48,8 @@ const DOM = {
   // Auth Modal
   authModal:         document.getElementById("auth-modal"),
   authCloseBtn:      document.getElementById("auth-close-btn"),
-  authForm:          document.getElementById("auth-form"),
-  authEmailInput:    document.getElementById("auth-email"),
-  authPasswordInput: document.getElementById("auth-password"),
-  authSubmitBtn:     document.getElementById("auth-submit-btn"),
-  authModalTitle:    document.getElementById("auth-modal-title"),
-  authModalSubtitle: document.getElementById("auth-modal-subtitle"),
   authErrorBanner:   document.getElementById("auth-error"),
-  authToggleBtn:     document.getElementById("auth-toggle-btn"),
-  authToggleText:    document.getElementById("auth-toggle-text"),
   googleSigninBtn:   document.getElementById("google-signin-btn"),
-  isRegisterMode:    false,
 
   // Detail Modal
   detailModal:              document.getElementById("detail-modal"),
@@ -149,8 +140,6 @@ function setupEventListeners() {
 
   // Auth modal
   DOM.authCloseBtn.addEventListener("click", closeAuthModal);
-  DOM.authToggleBtn.addEventListener("click", (e) => { e.preventDefault(); toggleAuthMode(); });
-  DOM.authForm.addEventListener("submit", handleAuthSubmit);
   DOM.googleSigninBtn.addEventListener("click", handleGoogleSignIn);
 
   // Detail modal
@@ -242,53 +231,12 @@ function switchScreen(screenId) {
 // ---------------------------------------------------------------------------
 function openAuthModal() {
   DOM.authErrorBanner.style.display = "none";
-  DOM.authEmailInput.value    = "";
-  DOM.authPasswordInput.value = "";
-  DOM.isRegisterMode          = false;
-  updateAuthModalUI();
   DOM.authModal.classList.add("active");
 }
 
 function closeAuthModal() {
   DOM.authModal.classList.remove("active");
   intendedScreenAfterAuth = null;
-}
-
-function toggleAuthMode() {
-  DOM.isRegisterMode = !DOM.isRegisterMode;
-  DOM.authErrorBanner.style.display = "none";
-  updateAuthModalUI();
-}
-
-function updateAuthModalUI() {
-  const reg = DOM.isRegisterMode;
-  DOM.authModalTitle.textContent    = reg ? "Create Account"                        : "Log In";
-  DOM.authModalSubtitle.textContent = reg ? "Sign up to track lists and rate shows" : "Log in to save watchlists and write reviews";
-  DOM.authSubmitBtn.textContent     = reg ? "Sign Up"                               : "Log In";
-  DOM.authToggleText.textContent    = reg ? "Already have an account?"              : "Don't have an account?";
-  DOM.authToggleBtn.textContent     = reg ? "Log In"                                : "Sign Up";
-}
-
-async function handleAuthSubmit(e) {
-  e.preventDefault();
-  DOM.authErrorBanner.style.display = "none";
-  DOM.authSubmitBtn.disabled        = true;
-  DOM.authSubmitBtn.textContent     = "Please wait…";
-
-  try {
-    if (DOM.isRegisterMode) {
-      await authService.register(DOM.authEmailInput.value, DOM.authPasswordInput.value);
-    } else {
-      await authService.login(DOM.authEmailInput.value, DOM.authPasswordInput.value);
-    }
-    closeAuthModal();
-    if (intendedScreenAfterAuth) { switchScreen(intendedScreenAfterAuth); intendedScreenAfterAuth = null; }
-  } catch (error) {
-    DOM.authErrorBanner.textContent    = error.message;
-    DOM.authErrorBanner.style.display  = "block";
-    DOM.authSubmitBtn.disabled         = false;
-    updateAuthModalUI(); // restore button text
-  }
 }
 
 async function handleGoogleSignIn() {

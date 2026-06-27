@@ -799,26 +799,6 @@ body {
   color: var(--text-secondary);
 }
 
-#auth-form .btn {
-  width: 100%;
-  height: 46px;
-  margin-top: 8px;
-}
-
-.auth-toggle-link {
-  text-align: center;
-  margin-top: 16px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.auth-toggle-link a {
-  color: var(--primary-color);
-  text-decoration: none;
-  font-weight: 600;
-  margin-left: 4px;
-}
-
 .error-banner {
   background-color: rgba(229, 9, 20, 0.1);
   border: 1px solid rgba(229, 9, 20, 0.3);
@@ -1173,7 +1153,7 @@ body {
   font-weight: 600;
   font-size: 14px;
   gap: 10px;
-  margin-bottom: 4px;
+  margin-top: 8px;
   transition: all 0.2s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
@@ -1192,24 +1172,6 @@ body {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-}
-
-/* Auth Divider */
-.auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 14px 0;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border-color);
 }
 
 /* App Loading Overlay */

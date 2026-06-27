@@ -2,8 +2,6 @@
 // UI components must never import from firebase.js directly.
 
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
   signOut,
@@ -58,31 +56,6 @@ export function isAuthenticated() {
 }
 
 /**
- * Register a new user with email + password.
- * Firebase automatically signs the user in after successful registration.
- */
-export async function register(email, password) {
-  try {
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    return { id: cred.user.uid, email: cred.user.email };
-  } catch (error) {
-    console.error("Registration error:", error);
-    throw new Error(_mapAuthError(error.code));
-  }
-}
-
-/** Sign an existing user in with email + password. */
-export async function login(email, password) {
-  try {
-    const cred = await signInWithEmailAndPassword(auth, email, password);
-    return { id: cred.user.uid, email: cred.user.email };
-  } catch (error) {
-    console.error("Login error:", error);
-    throw new Error(_mapAuthError(error.code));
-  }
-}
-
-/**
  * Sign in (or register) using Google OAuth popup.
  * Works for both new and returning Google users.
  */
@@ -94,8 +67,10 @@ export async function loginWithGoogle() {
     return { id: cred.user.uid, email: cred.user.email };
   } catch (error) {
     if (error.code === "auth/popup-closed-by-user") return null; // User dismissed
+    if (error.code === "auth/popup-blocked")
+      throw new Error("Popup was blocked. Please allow popups for this site.");
     console.error("Google sign-in error:", error);
-    throw new Error(_mapAuthError(error.code));
+    throw new Error("Google sign-in failed. Please try again.");
   }
 }
 
@@ -109,21 +84,4 @@ export async function logout() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
-function _mapAuthError(code) {
-  const MAP = {
-    "auth/email-already-in-use":   "An account with this email already exists.",
-    "auth/invalid-email":          "Invalid email address.",
-    "auth/weak-password":          "Password must be at least 6 characters.",
-    "auth/user-not-found":         "No account found with this email.",
-    "auth/wrong-password":         "Incorrect password. Please try again.",
-    "auth/invalid-credential":     "Invalid email or password.",
-    "auth/too-many-requests":      "Too many failed attempts. Please try again later.",
-    "auth/network-request-failed": "Network error. Check your connection and try again.",
-    "auth/popup-blocked":          "Popup was blocked. Please allow popups for this site.",
-  };
-  return MAP[code] || "An authentication error occurred. Please try again.";
-}
