@@ -1,7 +1,7 @@
 // Watchmode API Service
 
 const BASE_URL = "https://api.watchmode.com/v1/";
-const CACHE_PREFIX = "cinefind_cache_v2_";
+const CACHE_PREFIX = "cinefind_cache_v3_";
 
 // Mock Data for fallback when API keys are not supplied
 const MOCK_TITLES = [
@@ -333,7 +333,12 @@ export async function getTitleSources(id) {
     const response = await fetchFromWatchmode(`title/${id}/sources/`, { region });
     
     // Map response structure to our standard format
-    const sources = (response || []).map(s => ({
+    const seen = new Set();
+    const sources = (response || []).filter(s => {
+      if (seen.has(s.source_id)) return false;
+      seen.add(s.source_id);
+      return true;
+    }).map(s => ({
       source_id: s.source_id,
       name: s.name,
       type: s.type, // sub, rent, buy, free
