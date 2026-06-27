@@ -603,7 +603,6 @@ async function loadSources(titleId) {
       return `
         <a href="${link}" target="_blank" class="source-item">
           <div class="source-left">
-            ${getLogoForSource(source.source_id, source.name)}
             <span class="source-name">${source.name}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
