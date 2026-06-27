@@ -74,9 +74,9 @@ export function getLogoForSource(sourceId, fallbackName = "") {
     return `<span class="streaming-logo-badge" style="background-color: ${logo.color};" title="${logo.name}">${logo.svg}</span>`;
   }
   
-  // Custom fallback text-based circle badge if logo not in map
-  const initial = fallbackName ? fallbackName.substring(0, 2).toUpperCase() : "S";
-  return `<span class="streaming-logo-badge fallback" style="background-color: #333333;" title="${fallbackName || 'Streaming'}"><span class="badge-text">${initial}</span></span>`;
+  // Text-based badge showing the service name
+  const name = fallbackName || "Streaming";
+  return `<span class="streaming-logo-badge fallback" title="${name}"><span class="badge-text">${name}</span></span>`;
 }
 
 // User-facing strings

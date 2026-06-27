@@ -538,6 +538,7 @@ body {
   overflow: hidden;
   color: #ffffff;
   padding: 2px;
+  flex-shrink: 0;
 }
 
 .streaming-logo-badge svg {
@@ -546,12 +547,20 @@ body {
 }
 
 .streaming-logo-badge.fallback {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  width: auto;
+  height: 18px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .badge-text {
-  font-size: 8px;
-  font-weight: 700;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #ccc;
 }
 
 /* My Lists Screen */
@@ -999,6 +1008,12 @@ body {
 
 .source-left .streaming-logo-badge.fallback {
   border-radius: 4px;
+  height: 26px;
+  padding: 2px 8px;
+}
+
+.source-left .streaming-logo-badge.fallback .badge-text {
+  font-size: 12px;
 }
 
 .source-name {
