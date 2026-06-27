@@ -269,10 +269,32 @@ async function handleGoogleSignIn() {
 // ---------------------------------------------------------------------------
 // Trending & Search
 // ---------------------------------------------------------------------------
+function loadPosterForCard(container, titleId, posterUrl) {
+  if (!posterUrl) return;
+  const card = container.querySelector(`[data-id="${titleId}"]`);
+  if (!card) return;
+  const wrapper = card.querySelector(".card-poster-wrapper");
+  const badge = wrapper?.querySelector(".card-media-badge");
+  if (!wrapper || wrapper.querySelector(".card-poster")) return;
+  const img = document.createElement("img");
+  img.className = "card-poster";
+  img.src = posterUrl;
+  img.alt = "";
+  img.loading = "lazy";
+  wrapper.insertBefore(img, badge);
+  const placeholder = wrapper.querySelector(".card-poster-placeholder");
+  if (placeholder) placeholder.remove();
+}
+
 async function loadTrending() {
   try {
     const titles = await watchmodeService.getTrendingTitles();
     renderGrid(DOM.trendingGrid, titles);
+    titles.forEach(t => {
+      watchmodeService.getTitleDetails(t.id).then(d => {
+        loadPosterForCard(DOM.trendingGrid, t.id, d?.poster);
+      }).catch(() => {});
+    });
   } catch (error) {
     console.error("Failed to load trending titles:", error);
     DOM.trendingGrid.innerHTML = emptyStateHtml("📡", "Failed to load content. Check your internet connection.");
@@ -299,6 +321,11 @@ async function triggerSearch() {
       DOM.searchResultsGrid.innerHTML = emptyStateHtml("🔍", `No results found for "${query}". Try adjusting filters or check spelling.`);
     } else {
       renderGrid(DOM.searchResultsGrid, results);
+      results.slice(0, 10).forEach(t => {
+        watchmodeService.getTitleDetails(t.id).then(d => {
+          loadPosterForCard(DOM.searchResultsGrid, t.id, d?.poster);
+        }).catch(() => {});
+      });
     }
   } catch (error) {
     console.error("Search failed:", error);
@@ -332,9 +359,12 @@ function renderGrid(container, titles) {
     const card = document.createElement("div");
     card.className = "movie-card";
     card.setAttribute("data-id", title.id);
+    const posterHtml = title.poster
+      ? `<img class="card-poster" src="${title.poster}" alt="${title.name}" loading="lazy">`
+      : `<div class="card-poster-placeholder"><span>${title.name}</span></div>`;
     card.innerHTML = `
       <div class="card-poster-wrapper">
-        <img class="card-poster" src="${title.poster}" alt="${title.name}" loading="lazy">
+        ${posterHtml}
         <span class="card-media-badge">${title.type === "tv_series" ? "TV" : "Movie"}</span>
         <button class="card-save-btn ${saveBtnClass}" data-id="${title.id}" title="Save to Watch List">${saveBtnText}</button>
       </div>
