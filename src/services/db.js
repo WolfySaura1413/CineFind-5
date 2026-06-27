@@ -212,7 +212,7 @@ export async function getUserReviews(userId) {
  * Add or update a review.
  * Uses a deterministic doc ID so each user can only have one review per title.
  */
-export async function addReview(userId, userEmail, titleId, titleName, rating, body, isPublic) {
+export async function addReview(userId, userEmail, titleId, titleName, rating, criteria, isPublic) {
   if (!userId) throw new Error("Authentication required.");
   if (rating < 1 || rating > 5) throw new Error("Rating must be between 1 and 5 stars.");
 
@@ -228,7 +228,7 @@ export async function addReview(userId, userEmail, titleId, titleName, rating, b
       title_id:    String(titleId),
       title_name:  titleName,
       rating:      parseInt(rating, 10),
-      body:        body || "",
+      criteria:    Array.isArray(criteria) ? criteria : [],
       is_public:   !!isPublic,
       created_at:  existing.exists() ? existing.data().created_at : serverTimestamp(),
       updated_at:  serverTimestamp(),
@@ -268,27 +268,27 @@ export function parseNameFromEmail(email) {
  * or the default { mode: "first_name", nickname: "" }.
  */
 export async function getProfile(userId) {
-  if (!userId) return { mode: "first_name", nickname: "" };
+  if (!userId) return { mode: "first_name" };
   try {
     const ref = doc(db, "users", userId, "profile", "settings");
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const d = snap.data();
-      return { mode: d.mode || "first_name", nickname: d.nickname || "" };
+      return { mode: d.mode || "first_name" };
     }
   } catch (e) {
     console.warn("getProfile fallback to default:", e);
   }
-  return { mode: "first_name", nickname: "" };
+  return { mode: "first_name" };
 }
 
 /**
  * Save the user's display-name preference to Firestore.
  */
-export async function saveProfile(userId, mode, nickname = "") {
+export async function saveProfile(userId, mode) {
   if (!userId) throw new Error("Authentication required.");
   const ref = doc(db, "users", userId, "profile", "settings");
-  await setDoc(ref, { mode, nickname, updated_at: serverTimestamp() });
+  await setDoc(ref, { mode, updated_at: serverTimestamp() });
 }
 
 /**
@@ -300,8 +300,6 @@ export function getDisplayLabel(profile, parsed, fallbackEmail) {
       return parsed.first || fallbackEmail || "User";
     case "last_name":
       return parsed.last || parsed.first || fallbackEmail || "User";
-    case "nickname":
-      return profile.nickname || parsed.first || fallbackEmail || "User";
     case "anonymous":
       return "Anonymous";
     default:

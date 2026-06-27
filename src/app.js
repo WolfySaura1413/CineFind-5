@@ -69,7 +69,7 @@ const DOM = {
   detailReviewsContainer:   document.getElementById("detail-reviews-container"),
   starsSelector:            document.getElementById("stars-selector"),
   reviewForm:               document.getElementById("review-form"),
-  reviewBody:               document.getElementById("review-body"),
+
   reviewPublic:             document.getElementById("review-public"),
 
   // Loading overlay
@@ -487,50 +487,25 @@ function renderDisplayNameOptions(user) {
     const modes = [
       { value: "first_name", label: parsed.first ? `First Name (${parsed.first})` : "First Name" },
       { value: "last_name",  label: parsed.last  ? `Last Name (${parsed.last})`   : "Last Name" },
-      { value: "nickname",   label: "Custom Nickname" },
       { value: "anonymous",  label: "Anonymous" },
     ];
 
     DOM.displayNameOptions.innerHTML = modes.map(m => `
       <label class="name-option${profile.mode === m.value ? " selected" : ""}">
         <input type="radio" name="display-name" value="${m.value}"
-          ${profile.mode === m.value ? "checked" : ""}
-          data-nickname="${m.value === "nickname" ? "1" : "0"}">
+          ${profile.mode === m.value ? "checked" : ""}>
         <span>${m.label}</span>
       </label>
-    `).join("") + `
-      <div id="nickname-input-wrap" class="nickname-input-wrap${profile.mode === "nickname" ? " visible" : ""}">
-        <input type="text" id="nickname-input" class="input" placeholder="Your nickname..." value="${profile.nickname || parsed.first || ""}" maxlength="30">
-        <button id="save-nickname-btn" class="btn btn-small">Save</button>
-      </div>
-      <div class="name-saved-msg" id="name-saved-msg"></div>`;
+    `).join("") + `<div class="name-saved-msg" id="name-saved-msg"></div>`;
 
-    // Radio change → save immediately (except nickname mode needs the text input)
     DOM.displayNameOptions.querySelectorAll("input[name='display-name']").forEach(radio => {
       radio.addEventListener("change", () => {
-        const val = radio.value;
         DOM.displayNameOptions.querySelectorAll(".name-option").forEach(el => el.classList.remove("selected"));
         radio.closest(".name-option").classList.add("selected");
-        const wrap = document.getElementById("nickname-input-wrap");
-        if (val === "nickname") {
-          wrap.classList.add("visible");
-        } else {
-          wrap.classList.remove("visible");
-          dbService.saveProfile(user.id, val).then(() => {
-            document.getElementById("name-saved-msg").textContent = "Saved!";
-          }).catch(() => {});
-        }
-      });
-    });
-
-    // Save nickname button
-    document.getElementById("save-nickname-btn")?.addEventListener("click", () => {
-      const nick = document.getElementById("nickname-input").value.trim();
-      if (nick) {
-        dbService.saveProfile(user.id, "nickname", nick).then(() => {
+        dbService.saveProfile(user.id, radio.value).then(() => {
           document.getElementById("name-saved-msg").textContent = "Saved!";
         }).catch(() => {});
-      }
+      });
     });
   }).catch(() => {});
 }
@@ -556,7 +531,7 @@ async function renderProfileReviews() {
           <span class="review-card-title-name">${rev.title_name}</span>
           <span class="review-card-stars">${"★".repeat(rev.rating)}${"☆".repeat(5 - rev.rating)}</span>
         </div>
-        <p class="review-card-body">${rev.body || "<i>No written review.</i>"}</p>
+        <div class="review-card-criteria">${(rev.criteria || []).map(c => `<span class="criteria-tag">${c}</span>`).join("") || '<span class="no-criteria">No criteria selected</span>'}</div>
         <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:6px;">
           <span>${rev.is_public ? "🌍 Public" : "🔒 Private"}</span>
           <span>${_formatDate(rev.created_at)}</span>
@@ -582,7 +557,7 @@ async function openDetailModal(titleId) {
   DOM.detailSourcesList.innerHTML     = `<div class="no-sources-text">Checking availability…</div>`;
   DOM.detailReviewsContainer.innerHTML = "";
   setReviewRating(0);
-  DOM.reviewBody.value = "";
+  document.querySelectorAll("#review-criteria-list input").forEach(cb => cb.checked = false);
   DOM.reviewForm.reset();
   DOM.detailModal.classList.add("active");
 
@@ -726,7 +701,7 @@ async function renderDetailReviews() {
           <span class="review-card-email">${label}</span>
           <span class="review-card-stars">${"★".repeat(rev.rating)}${"☆".repeat(5 - rev.rating)}</span>
         </div>
-        <p class="review-card-body">${rev.body || "<i>Rated only — no written review.</i>"}</p>
+        <div class="review-card-criteria">${(rev.criteria || []).map(c => `<span class="criteria-tag">${c}</span>`).join("") || '<span class="no-criteria">No criteria selected</span>'}</div>
         <div style="font-size:9px;color:var(--text-muted);margin-top:4px;display:flex;justify-content:space-between;">
           <span>${rev.is_public ? "🌍 Public" : "🔒 Private"}</span>
           <span>${_formatDate(rev.updated_at)}</span>
@@ -760,6 +735,10 @@ async function handleReviewSubmit(e) {
   submitBtn.disabled   = true;
   submitBtn.textContent = "Saving…";
 
+  const criteria = Array.from(
+    document.querySelectorAll("#review-criteria-list input:checked")
+  ).map(cb => cb.value);
+
   try {
     await dbService.addReview(
       user.id,
@@ -767,11 +746,11 @@ async function handleReviewSubmit(e) {
       selectedTitle.id,
       selectedTitle.name,
       selectedReviewRating,
-      DOM.reviewBody.value.trim(),
+      criteria,
       DOM.reviewPublic.checked,
     );
     setReviewRating(0);
-    DOM.reviewBody.value = "";
+    document.querySelectorAll("#review-criteria-list input").forEach(cb => cb.checked = false);
     await renderDetailReviews();
   } catch (error) {
     console.error("Review submit error:", error);

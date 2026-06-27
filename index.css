@@ -675,37 +675,73 @@ body {
   accent-color: var(--primary-color);
 }
 
-.nickname-input-wrap {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.nickname-input-wrap.visible {
-  display: flex;
-}
-
-.nickname-input-wrap .input {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--surface-color);
-  color: var(--text-primary);
-  font-size: 14px;
-}
-
-.nickname-input-wrap .btn-small {
-  padding: 8px 16px;
-  font-size: 13px;
-}
-
 .name-saved-msg {
   font-size: 12px;
   color: var(--confirmation-color);
   margin-top: 4px;
   min-height: 18px;
+}
+
+/* Review criteria checkboxes */
+.review-criteria {
+  margin: 10px 0;
+}
+
+.review-criteria > span {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.criteria-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.criteria-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 4px 10px;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.criteria-item:has(input:checked) {
+  border-color: var(--primary-color);
+  background: rgba(55, 138, 221, 0.1);
+}
+
+.criteria-item input {
+  accent-color: var(--primary-color);
+}
+
+/* Criteria tags on review cards */
+.review-card-criteria {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 2px;
+}
+
+.criteria-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(55, 138, 221, 0.12);
+  color: #8ab8f0;
+}
+
+.no-criteria {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .profile-reviews-section {
