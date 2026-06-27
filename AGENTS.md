@@ -67,8 +67,9 @@ WATCHMODE_API_KEY_2=   # fallback key — use if primary hits rate limits
 ```
 
 - All Watchmode calls must go through `src/services/watchmode.js` — never call the API directly from components or screens
-- Append the key as a query param: `?apiKey=${process.env.wm_Oq-OaBvQ2y8uR4YdEaxPstnou-Zf16Qud6AdOydyzlE}`
-- If a request fails with 429 (rate limit), automatically retry once with `wm_NIPxuym3KKU7ZbRZhe1NzFdjRKdrtJAKlB5cPzXPRo8`
+- Append the key as a query param: `?apiKey=${WATCHMODE_API_KEY}`
+- Keys are read from `config.js` (gitignored, never committed) via `window.CONFIG.WATCHMODE_API_KEY_1` (primary) and `window.CONFIG.WATCHMODE_API_KEY_2` (fallback)
+- If a request fails with 429 (rate limit), automatically retry once with the fallback key
 
 ### Key endpoints
 

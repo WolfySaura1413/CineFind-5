@@ -244,7 +244,7 @@ export async function searchTitles(query, typeFilter = "") {
 
     const results = (response.title_results || []).map(t => ({
       id: String(t.id),
-      name: t.title,
+      name: t.name,
       year: t.year,
       type: t.type === "tv_series" ? "tv_series" : "movie",
       poster: t.poster || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500",
@@ -338,8 +338,8 @@ export async function getTitleSources(id) {
       name: s.name,
       type: s.type, // sub, rent, buy, free
       region: s.region,
-      deeplink_android: s.deeplink_android || "",
-      deeplink_ios: s.deeplink_ios || "",
+      deeplink_android: s.android_url || "",
+      deeplink_ios: s.ios_url || "",
     }));
 
     setCachedData(cacheKey, sources, 24); // Cache sources for 24 hours
