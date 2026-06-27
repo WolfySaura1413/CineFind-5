@@ -379,7 +379,7 @@ function renderGrid(container, titles) {
     // Async load logos without blocking render
     watchmodeService.getTitleSources(title.id).then(srcs => {
       const el = document.getElementById(`logos-card-${title.id}`);
-      if (el) el.innerHTML = srcs.slice(0, 3).map(s => getLogoForSource(s.source_id, s.name)).join("");
+      if (el) el.innerHTML = srcs.slice(0, 2).map(s => getLogoForSource(s.source_id, s.name)).join("");
     });
 
     card.addEventListener("click", (e) => {

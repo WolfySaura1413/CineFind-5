@@ -69,12 +69,6 @@ export const STREAMING_LOGOS = {
 };
 
 export function getLogoForSource(sourceId, fallbackName = "") {
-  const logo = STREAMING_LOGOS[sourceId];
-  if (logo) {
-    return `<span class="streaming-logo-badge" style="background-color: ${logo.color};" title="${logo.name}">${logo.svg}</span>`;
-  }
-  
-  // Text-based badge showing the service name
   const name = fallbackName || "Streaming";
   return `<span class="streaming-logo-badge fallback" title="${name}"><span class="badge-text">${name}</span></span>`;
 }
