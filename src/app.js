@@ -84,6 +84,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Wait for Firebase to resolve the first auth state before rendering.
   await authService.authReady;
 
+  // Ensure Firestore listeners are started (auth_change event may have
+  // been dispatched before the event listener was registered above).
+  const bootUser = authService.getCurrentUser();
+  if (bootUser) dbService.initUserListeners(bootUser.id);
+
   // Hide the loading overlay with a smooth fade.
   DOM.loadingOverlay.classList.add("hidden");
   setTimeout(() => DOM.loadingOverlay.remove(), 450);
