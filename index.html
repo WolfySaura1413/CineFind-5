@@ -21,8 +21,11 @@
       <!-- Top Header -->
       <header class="app-header">
         <div class="header-logo">
-          <span class="logo-icon">🎬</span>
-          <h1 class="logo-text">CineFind</h1>
+          <div class="header-logo-row">
+            <span class="logo-icon">🎬</span>
+            <h1 class="logo-text">CineFind</h1>
+          </div>
+          <span class="header-powered">Powered by Watchmode API</span>
         </div>
         <div class="header-user-status" id="header-user-status">
           <!-- Populated by JS -->
@@ -39,14 +42,29 @@
             <span class="search-text-placeholder">Search movies and TV shows...</span>
           </div>
           
-          <div class="section-title-wrapper">
-            <h2 class="section-title">Trending Now</h2>
-            <span class="section-subtitle">Most popular streaming matches today</span>
+          <div class="home-categories" id="home-categories">
+            <button class="category-btn" data-category="browse">
+              <span class="category-icon">🔍</span>
+              <div class="category-text">
+                <span class="category-label">Browse</span>
+                <span class="category-desc">Discover movies and TV shows</span>
+              </div>
+            </button>
+            <button class="category-btn" data-category="mylists">
+              <span class="category-icon">📋</span>
+              <div class="category-text">
+                <span class="category-label">My Lists</span>
+                <span class="category-desc">Your Watch/Watched Lists</span>
+              </div>
+            </button>
           </div>
           
-          <div class="movies-grid" id="trending-grid">
-            <!-- Populated by JS -->
-            <div class="loading-placeholder">Loading trending titles...</div>
+          <div class="home-results" id="home-results" style="display:none;">
+            <div class="section-title-wrapper">
+              <h2 class="section-title" id="home-results-title">Browse</h2>
+              <button class="category-back-btn" id="category-back-btn">← Back to categories</button>
+            </div>
+            <div class="movies-grid" id="trending-grid"></div>
           </div>
         </section>
 
@@ -66,6 +84,10 @@
             </div>
           </div>
 
+          <div class="recent-searches" id="recent-searches" style="display:none;">
+            <!-- Populated by JS -->
+          </div>
+
           <div class="movies-grid" id="search-results-grid">
             <div class="empty-state">
               <span class="empty-icon">🍿</span>
@@ -80,7 +102,7 @@
             <h2 class="page-title">My Lists</h2>
             <div class="list-toggle-bar">
               <button id="toggle-watchlist-btn" class="toggle-list-tab active">Watch List</button>
-              <button id="toggle-watched-btn" class="toggle-list-tab">Watched</button>
+              <button id="toggle-watched-btn" class="toggle-list-tab">Watched List</button>
             </div>
           </div>
 
@@ -102,13 +124,53 @@
 
           <div class="profile-section">
             <h3 class="section-title">Display Name</h3>
-            <p class="profile-section-desc">Choose how your name appears on reviews:</p>
+            <p class="profile-section-desc">Set your first and last name, then choose how it appears:</p>
+            <div class="name-fields">
+              <select id="select-first-name" class="name-select"><option value="">First name</option></select>
+              <select id="select-last-name" class="name-select"><option value="">Last name</option></select>
+            </div>
             <div id="display-name-options" class="name-options"></div>
+            <div class="name-saved-msg" id="name-saved-msg"></div>
+          </div>
+
+          <div class="profile-section">
+            <h3 class="section-title">Profile Avatar</h3>
+            <p class="profile-section-desc">Choose an emoji as your profile picture:</p>
+            <div class="avatar-picker" id="avatar-picker">
+              <span class="avatar-preview" id="avatar-preview">👤</span>
+              <div class="emoji-grid" id="emoji-grid">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+
+          <div class="profile-section">
+            <h3 class="section-title">Content Filter</h3>
+            <p class="profile-section-desc">Hide results above a certain age rating:</p>
+            <div class="rating-filter-row">
+              <select id="content-rating-filter" class="rating-filter-select">
+                <option value="">No filter (show all)</option>
+                <option value="0">G / TV-Y / TV-G</option>
+                <option value="1">PG / TV-PG / TV-Y7</option>
+                <option value="2">PG-13 / TV-14</option>
+                <option value="3">R / TV-MA</option>
+                <option value="4">NC-17</option>
+              </select>
+              <span class="rating-filter-saved" id="rating-filter-saved"></span>
+            </div>
           </div>
 
           <div class="profile-reviews-section">
             <h3 class="section-title">My Reviews</h3>
             <div class="reviews-list" id="profile-reviews-list">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <div class="profile-section">
+            <h3 class="section-title">Hidden Posters</h3>
+            <p class="profile-section-desc">Titles whose posters you've hidden. Click to unhide.</p>
+            <div class="hidden-posters-list" id="profile-hidden-posters-list">
               <!-- Populated by JS -->
             </div>
           </div>
@@ -185,13 +247,22 @@
             <div class="detail-info-row">
               <span id="detail-year" class="meta-tag">2024</span>
               <span id="detail-type" class="meta-tag">Movie</span>
+              <span id="detail-us-rating" class="meta-tag meta-rating" style="display:none;"></span>
             </div>
             <div id="detail-genres" class="detail-genres-row">
               <!-- Populated by JS -->
             </div>
-            <div class="detail-average-rating">
-              <span class="rating-stars" id="detail-stars-avg">★★★★★</span>
-              <span class="rating-num" id="detail-rating-avg-text">4.8 / 5</span>
+            <div class="detail-ratings">
+              <div class="detail-rating-row">
+                <span class="rating-label">Watchmode</span>
+                <span class="rating-stars rating-watchmode" id="detail-stars-watchmode">☆☆☆☆☆</span>
+                <span class="rating-num" id="detail-rating-watchmode-text">—</span>
+              </div>
+              <div class="detail-rating-row">
+                <span class="rating-label">CineFind</span>
+                <span class="rating-stars rating-cinefind" id="detail-stars-cinefind">☆☆☆☆☆</span>
+                <span class="rating-num" id="detail-rating-cinefind-text">No reviews yet</span>
+              </div>
             </div>
           </div>
         </div>
@@ -233,11 +304,11 @@
               <div class="review-rating-input">
                 <span>Your Rating:</span>
                 <div class="stars-selector" id="stars-selector">
-                  <span data-val="1">★</span>
-                  <span data-val="2">★</span>
-                  <span data-val="3">★</span>
-                  <span data-val="4">★</span>
                   <span data-val="5">★</span>
+                  <span data-val="4">★</span>
+                  <span data-val="3">★</span>
+                  <span data-val="2">★</span>
+                  <span data-val="1">★</span>
                 </div>
               </div>
               <div class="review-criteria">
@@ -249,7 +320,7 @@
                   <label class="criteria-item"><input type="checkbox" value="Great visuals"> Great visuals</label>
                   <label class="criteria-item"><input type="checkbox" value="Great soundtrack"> Great soundtrack</label>
                   <label class="criteria-item"><input type="checkbox" value="Great voice acting"> Great voice acting</label>
-                  <label class="criteria-item"><input type="checkbox" value="Great for Binge-Watching"> Great for Binge-Watching</label>
+                  <label class="criteria-item"><input type="checkbox" value="Great for binge-watching"> Great for binge-watching</label>
                   <label class="criteria-item"><input type="checkbox" value="Good value"> Good value</label>
                 </div>
               </div>

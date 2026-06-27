@@ -209,6 +209,21 @@ export async function getUserReviews(userId) {
 }
 
 /**
+ * Fetch a single review by user + title.
+ */
+export async function getReview(userId, titleId) {
+  if (!userId) return null;
+  try {
+    const ref = doc(db, "reviews", `${userId}_${titleId}`);
+    const snap = await getDoc(ref);
+    return snap.exists() ? { ...snap.data(), id: snap.id } : null;
+  } catch (e) {
+    console.warn("getReview error:", e);
+    return null;
+  }
+}
+
+/**
  * Add or update a review.
  * Uses a deterministic doc ID so each user can only have one review per title.
  */
@@ -241,6 +256,26 @@ export async function addReview(userId, userEmail, titleId, titleName, rating, c
   }
 }
 
+/**
+ * Delete a review.
+ */
+export async function deleteReview(userId, titleId) {
+  if (!userId) throw new Error("Authentication required.");
+  const ref = doc(db, "reviews", `${userId}_${titleId}`);
+  await deleteDoc(ref);
+  window.dispatchEvent(new Event("reviews_change"));
+}
+
+/**
+ * Toggle a review's public/private status.
+ */
+export async function toggleReviewVisibility(userId, titleId, isPublic) {
+  if (!userId) throw new Error("Authentication required.");
+  const ref = doc(db, "reviews", `${userId}_${titleId}`);
+  await setDoc(ref, { is_public: !!isPublic, updated_at: serverTimestamp() }, { merge: true });
+  window.dispatchEvent(new Event("reviews_change"));
+}
+
 // ---------------------------------------------------------------------------
 // Profile — display name preferences
 // Firestore path: users/{uid}/profile
@@ -264,45 +299,89 @@ export function parseNameFromEmail(email) {
 
 /**
  * Load the user's display-name preference from Firestore.
- * Returns { mode: "first_name"|"last_name"|"nickname"|"anonymous", nickname: "" }
- * or the default { mode: "first_name", nickname: "" }.
+ * Returns { mode, firstName, lastName, maxContentRating }
+ * or the default { mode: "first_name", firstName: "", lastName: "", maxContentRating: "" }.
  */
 export async function getProfile(userId) {
-  if (!userId) return { mode: "first_name" };
+  if (!userId) return { mode: "first_name", firstName: "", lastName: "", maxContentRating: "" };
   try {
     const ref = doc(db, "users", userId, "profile", "settings");
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const d = snap.data();
-      return { mode: d.mode || "first_name" };
+      return {
+        mode:             d.mode || "first_name",
+        firstName:        d.firstName || "",
+        lastName:         d.lastName || "",
+        maxContentRating: d.maxContentRating ?? "",
+        avatarEmoji:      d.avatarEmoji || "",
+      };
     }
   } catch (e) {
     console.warn("getProfile fallback to default:", e);
   }
-  return { mode: "first_name" };
+  return { mode: "first_name", firstName: "", lastName: "", maxContentRating: "", avatarEmoji: "" };
 }
 
 /**
- * Save the user's display-name preference to Firestore.
+ * Save the user's display-name preference, custom names, and avatar emoji.
  */
-export async function saveProfile(userId, mode) {
+export async function saveProfile(userId, mode, firstName = "", lastName = "", maxContentRating = "", avatarEmoji = "") {
   if (!userId) throw new Error("Authentication required.");
   const ref = doc(db, "users", userId, "profile", "settings");
-  await setDoc(ref, { mode, updated_at: serverTimestamp() });
+  await setDoc(ref, { mode, firstName, lastName, maxContentRating, avatarEmoji, updated_at: serverTimestamp() });
 }
 
 /**
  * Compute the effective display label for a review based on the user's profile.
  */
 export function getDisplayLabel(profile, parsed, fallbackEmail) {
+  const fn = profile.firstName || parsed.first || "";
+  const ln = profile.lastName  || parsed.last  || "";
   switch (profile.mode) {
     case "first_name":
-      return parsed.first || fallbackEmail || "User";
+      return fn || fallbackEmail || "User";
     case "last_name":
-      return parsed.last || parsed.first || fallbackEmail || "User";
+      return ln || fn || fallbackEmail || "User";
     case "anonymous":
       return "Anonymous";
     default:
-      return parsed.first || fallbackEmail || "User";
+      return fn || fallbackEmail || "User";
   }
 }
+
+/**
+ * Load hidden poster IDs & names for a user from Firestore.
+ * Returns { ids: Set<string>, names: {[id]: string} }
+ */
+export async function loadHiddenPosters(userId) {
+  if (!userId) return { ids: new Set(), names: {} };
+  try {
+    const ref = doc(db, "users", userId, "profile", "hiddenPosters");
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const d = snap.data();
+      const ids = new Set((d.titleIds || []).map(String));
+      const names = d.titleNames || {};
+      return { ids, names };
+    }
+  } catch (e) {
+    console.warn("loadHiddenPosters error:", e);
+  }
+  return { ids: new Set(), names: {} };
+}
+
+/**
+ * Save hidden poster IDs & names for a user to Firestore.
+ */
+export async function saveHiddenPosters(userId, titleIds, titleNames = {}) {
+  if (!userId) return;
+  try {
+    const ref = doc(db, "users", userId, "profile", "hiddenPosters");
+    await setDoc(ref, { titleIds: Array.from(titleIds).map(String), titleNames });
+  } catch (e) {
+    console.warn("saveHiddenPosters error:", e);
+  }
+}
+
+

@@ -12,6 +12,8 @@ let currentSearchType     = "";
 let selectedTitle         = null; // Title currently open in detail modal
 let selectedReviewRating  = 0;
 let intendedScreenAfterAuth = null;
+let hiddenPosterIds = new Set();   // title IDs whose poster the user has hidden
+let hiddenPosterNames = {};        // id → name lookup for hidden posters
 
 // ---------------------------------------------------------------------------
 // DOM element references
@@ -32,6 +34,7 @@ const DOM = {
   searchClearBtn:    document.getElementById("search-clear-btn"),
   filterTabs:        document.querySelectorAll(".filter-tab"),
   searchResultsGrid: document.getElementById("search-results-grid"),
+  recentSearches:    document.getElementById("recent-searches"),
 
   // My Lists
   toggleWatchlistBtn: document.getElementById("toggle-watchlist-btn"),
@@ -44,6 +47,7 @@ const DOM = {
   profileJoined:       document.getElementById("profile-joined"),
   logoutBtn:           document.getElementById("logout-btn"),
   profileReviewsList:  document.getElementById("profile-reviews-list"),
+  profileHiddenPosters: document.getElementById("profile-hidden-posters-list"),
   displayNameOptions:  document.getElementById("display-name-options"),
 
   // Auth Modal
@@ -59,9 +63,12 @@ const DOM = {
   detailTitle:              document.getElementById("detail-title"),
   detailYear:               document.getElementById("detail-year"),
   detailType:               document.getElementById("detail-type"),
+  detailUsRating:           document.getElementById("detail-us-rating"),
   detailGenres:             document.getElementById("detail-genres"),
-  detailStarsAvg:           document.getElementById("detail-stars-avg"),
-  detailRatingAvgText:      document.getElementById("detail-rating-avg-text"),
+  detailStarsWatchmode:     document.getElementById("detail-stars-watchmode"),
+  detailRatingWatchmode:    document.getElementById("detail-rating-watchmode-text"),
+  detailStarsCinefind:      document.getElementById("detail-stars-cinefind"),
+  detailRatingCinefind:     document.getElementById("detail-rating-cinefind-text"),
   detailBtnWatchlist:       document.getElementById("detail-btn-watchlist"),
   detailBtnWatched:         document.getElementById("detail-btn-watched"),
   detailPlot:               document.getElementById("detail-plot"),
@@ -95,7 +102,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   setTimeout(() => DOM.loadingOverlay.remove(), 450);
 
   updateUserHeader();
-  loadTrending();
+  // Load saved content rating filter on boot
+  if (bootUser) loadContentRatingFilter(bootUser.id);
 });
 
 // ---------------------------------------------------------------------------
@@ -107,6 +115,25 @@ function setupEventListeners() {
     tab.addEventListener("click", () => switchScreen(tab.getAttribute("data-screen")));
   });
 
+  // Home category buttons
+  document.getElementById("home-categories").addEventListener("click", (e) => {
+    const btn = e.target.closest(".category-btn");
+    if (!btn) return;
+    const cat = btn.dataset.category;
+    if (cat === "mylists") {
+      switchScreen("lists");
+      return;
+    }
+    loadCategory(cat);
+  });
+
+  // Back button from category results
+  document.getElementById("category-back-btn").addEventListener("click", () => {
+    document.getElementById("home-categories").style.display = "";
+    document.getElementById("home-results").style.display = "none";
+    document.getElementById("trending-grid").innerHTML = "";
+  });
+
   // Home search trigger
   DOM.homeSearchTrigger.addEventListener("click", () => {
     switchScreen("search");
@@ -115,11 +142,39 @@ function setupEventListeners() {
 
   // Search input + filter tabs
   DOM.searchInput.addEventListener("input", handleSearchInput);
+  DOM.searchInput.addEventListener("focus", () => {
+    if (!DOM.searchInput.value.trim()) renderRecentSearches();
+  });
   DOM.searchClearBtn.addEventListener("click", () => {
     DOM.searchInput.value = "";
     DOM.searchClearBtn.style.display = "none";
     DOM.searchResultsGrid.innerHTML = emptyStateHtml("🍿", "Type a movie or TV show name to start searching.");
+    DOM.recentSearches.style.display = "none";
     DOM.searchInput.focus();
+  });
+  DOM.recentSearches.addEventListener("click", (e) => {
+    const item = e.target.closest(".recent-search-item");
+    const del = e.target.closest(".recent-search-del");
+    if (del) {
+      e.stopPropagation();
+      const q = del.dataset.query;
+      const searches = getRecentSearches().filter(s => s !== q);
+      localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(searches));
+      renderRecentSearches();
+      return;
+    }
+    if (item) {
+      const q = item.dataset.query;
+      DOM.searchInput.value = q;
+      DOM.searchClearBtn.style.display = "block";
+      DOM.recentSearches.style.display = "none";
+      triggerSearch();
+    }
+  });
+  document.addEventListener("click", (e) => {
+    if (DOM.recentSearches.style.display !== "none" && !e.target.closest("#screen-search .search-header-container") && !e.target.closest("#recent-searches")) {
+      DOM.recentSearches.style.display = "none";
+    }
   });
   DOM.filterTabs.forEach(btn => {
     btn.addEventListener("click", () => {
@@ -151,6 +206,7 @@ function setupEventListeners() {
   // Detail modal
   DOM.detailCloseBtn.addEventListener("click", () => {
     DOM.detailModal.classList.remove("active");
+    DOM.detailPoster.style.display = ""; // reset hidden poster state
     selectedTitle = null;
   });
 
@@ -162,6 +218,29 @@ function setupEventListeners() {
   // Review form
   DOM.reviewForm.addEventListener("submit", handleReviewSubmit);
 
+  // Emoji picker (delegated)
+  document.getElementById("emoji-grid")?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".emoji-option");
+    if (!btn) return;
+    const emoji = btn.dataset.emoji;
+    const user = authService.getCurrentUser();
+    if (!user) return;
+    // Update preview
+    document.querySelector(".profile-avatar").textContent = emoji;
+    document.getElementById("avatar-preview").textContent = emoji;
+    // Highlight selected
+    document.querySelectorAll(".emoji-option").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    // Save
+    dbService.getProfile(user.id).then(p => {
+      dbService.saveProfile(user.id, p.mode, p.firstName, p.lastName, p.maxContentRating, emoji).then(() => {
+        // Also update header
+        const headerAvatar = document.getElementById("header-avatar");
+        if (headerAvatar) headerAvatar.textContent = emoji;
+      });
+    });
+  });
+
   // Logout
   DOM.logoutBtn.addEventListener("click", async () => {
     await authService.logout();
@@ -171,11 +250,20 @@ function setupEventListeners() {
   // Auth state changes (fired by onAuthStateChanged in auth.js)
   window.addEventListener("auth_change", () => {
     const user = authService.getCurrentUser();
-    // Initialise / tear down Firestore real-time listeners
     dbService.initUserListeners(user?.id ?? null);
     updateUserHeader();
     if (!user && (currentTab === "lists" || currentTab === "profile")) {
       switchScreen("home");
+    }
+    // Load hidden posters from Firestore
+    hiddenPosterIds = new Set();
+    hiddenPosterNames = {};
+    if (user) {
+      dbService.loadHiddenPosters(user.id).then(data => {
+        hiddenPosterIds = data.ids;
+        hiddenPosterNames = data.names;
+      });
+      loadContentRatingFilter(user.id);
     }
   });
 
@@ -203,8 +291,12 @@ function updateUserHeader() {
   const user = authService.getCurrentUser();
   if (user) {
     const label = user.displayName || user.email;
-    DOM.userStatus.innerHTML = `<span class="user-badge" id="header-profile-btn">${label}</span>`;
+    DOM.userStatus.innerHTML = `<span class="user-badge" id="header-profile-btn"><span class="user-avatar" id="header-avatar"></span>${label}</span>`;
     document.getElementById("header-profile-btn").addEventListener("click", () => switchScreen("profile"));
+    dbService.getProfile(user.id).then(p => {
+      const avatarEl = document.getElementById("header-avatar");
+      if (avatarEl) avatarEl.textContent = p.avatarEmoji || "👤";
+    }).catch(() => {});
   } else {
     DOM.userStatus.innerHTML = `<button class="login-link-btn" id="header-login-btn">Log In</button>`;
     document.getElementById("header-login-btn").addEventListener("click", openAuthModal);
@@ -228,8 +320,31 @@ function switchScreen(screenId) {
   DOM.screens.forEach(screen =>
     screen.classList.toggle("active", screen.id === `screen-${screenId}`));
 
-  if (screenId === "lists")   renderMyLists();
-  if (screenId === "profile") renderProfile();
+  // Tab-specific resets
+  if (screenId === "home") {
+    document.getElementById("home-categories").style.display = "";
+    document.getElementById("home-results").style.display = "none";
+    document.getElementById("trending-grid").innerHTML = "";
+  }
+  if (screenId === "lists") {
+    DOM.toggleWatchlistBtn.classList.add("active");
+    DOM.toggleWatchedBtn.classList.remove("active");
+    DOM.currentListTab = "watchlist";
+    renderMyLists();
+  }
+  if (screenId === "profile") {
+    document.getElementById("screen-profile").scrollTop = 0;
+    renderProfile();
+  }
+  if (screenId === "search") {
+    DOM.searchInput.value = "";
+    DOM.searchClearBtn.style.display = "none";
+    DOM.searchResultsGrid.innerHTML = emptyStateHtml("🍿", "Type a movie or TV show name to start searching.");
+    DOM.filterTabs.forEach(b => b.classList.remove("active"));
+    DOM.filterTabs[0].classList.add("active");
+    currentSearchType = "";
+    DOM.recentSearches.style.display = "none";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -292,24 +407,67 @@ function loadPosterForCard(container, titleId, posterUrl) {
   if (placeholder) placeholder.remove();
 }
 
-async function loadTrending() {
+function updateCardStars(titleId, userRating) {
+  const raw = userRating ? Math.round(Number(userRating) / 2) : 0;
+  const displayRating = Math.min(5, Math.max(0, raw));
+  const starsEl = document.querySelector(`.movie-card[data-id="${titleId}"] .card-rating-stars`);
+  if (!starsEl) return;
+  starsEl.textContent = displayRating > 0
+    ? "★".repeat(displayRating) + "☆".repeat(5 - displayRating)
+    : "☆☆☆☆☆";
+}
+
+// ---------------------------------------------------------------------------
+// Home category loading
+// ---------------------------------------------------------------------------
+async function loadCategory(cat) {
+  const grid     = document.getElementById("trending-grid");
+  const titleEl  = document.getElementById("home-results-title");
+  const catsDiv  = document.getElementById("home-categories");
+  const results  = document.getElementById("home-results");
+
+  catsDiv.style.display  = "none";
+  results.style.display  = "";
+  grid.innerHTML = `<div class="loading-placeholder">Loading…</div>`;
+
+  let titles;
   try {
-    const titles = await watchmodeService.getTrendingTitles();
-    renderGrid(DOM.trendingGrid, titles);
-    titles.forEach(t => {
-      watchmodeService.getTitleDetails(t.id).then(d => {
-        loadPosterForCard(DOM.trendingGrid, t.id, d?.poster);
-      }).catch(() => {});
-    });
-  } catch (error) {
-    console.error("Failed to load trending titles:", error);
-    DOM.trendingGrid.innerHTML = emptyStateHtml("📡", "Failed to load content. Check your internet connection.");
+    titleEl.textContent = "Browse";
+    titles = await watchmodeService.getTrendingTitles();
+  } catch {
+    grid.innerHTML = emptyStateHtml("📡", "Failed to load content.");
+    return;
   }
+
+  renderGrid(grid, titles);
+  // Mark every card as unknown (-1) upfront so the filter can find it even if details fail
+  grid.querySelectorAll(".movie-card").forEach(c => {
+    if (!c.hasAttribute("data-content-rating")) c.setAttribute("data-content-rating", "-1");
+  });
+  const promises = titles.map(t =>
+    watchmodeService.getTitleDetails(t.id).then(d => {
+      loadPosterForCard(grid, t.id, d?.poster);
+      const card = grid.querySelector(`.movie-card[data-id="${t.id}"]`);
+      if (card) {
+        const sev = d?.us_rating ? getContentRatingSeverity(d.us_rating) : -1;
+        card.setAttribute("data-content-rating", sev);
+        if (d?.user_rating) updateCardStars(t.id, d.user_rating);
+      }
+    }).catch(() => {/* card stays at -1 from initial markup */})
+  );
+  await Promise.allSettled(promises);
+  applyContentRatingFilter(grid, getCurrentMaxContentRating());
+}
+
+function getCurrentMaxContentRating() {
+  const sel = document.getElementById("content-rating-filter");
+  return sel ? sel.value : "";
 }
 
 function handleSearchInput() {
   const q = DOM.searchInput.value;
   DOM.searchClearBtn.style.display = q.length > 0 ? "block" : "none";
+  DOM.recentSearches.style.display = "none";
   clearTimeout(searchTimeout);
   searchTimeout = setTimeout(triggerSearch, 300);
 }
@@ -321,22 +479,68 @@ async function triggerSearch() {
     return;
   }
   DOM.searchResultsGrid.innerHTML = `<div class="loading-placeholder">Searching matches…</div>`;
+  saveRecentSearch(query);
   try {
     const results = await watchmodeService.searchTitles(query, currentSearchType);
     if (results.length === 0) {
       DOM.searchResultsGrid.innerHTML = emptyStateHtml("🔍", `No results found for "${query}". Try adjusting filters or check spelling.`);
     } else {
       renderGrid(DOM.searchResultsGrid, results);
-      results.slice(0, 10).forEach(t => {
+      // Mark all cards unknown (-1) upfront
+      DOM.searchResultsGrid.querySelectorAll(".movie-card").forEach(c => {
+        if (!c.hasAttribute("data-content-rating")) c.setAttribute("data-content-rating", "-1");
+      });
+      const promises = results.slice(0, 10).map(t =>
         watchmodeService.getTitleDetails(t.id).then(d => {
           loadPosterForCard(DOM.searchResultsGrid, t.id, d?.poster);
-        }).catch(() => {});
-      });
+          const card = DOM.searchResultsGrid.querySelector(`.movie-card[data-id="${t.id}"]`);
+          if (card) {
+            const sev = d?.us_rating ? getContentRatingSeverity(d.us_rating) : -1;
+            card.setAttribute("data-content-rating", sev);
+            if (d?.user_rating) updateCardStars(t.id, d.user_rating);
+          }
+        }).catch(() => {/* card stays at -1 from initial markup */})
+      );
+      await Promise.allSettled(promises);
+      applyContentRatingFilter(DOM.searchResultsGrid, getCurrentMaxContentRating());
     }
   } catch (error) {
     console.error("Search failed:", error);
     DOM.searchResultsGrid.innerHTML = emptyStateHtml("📡", "Search unavailable. Please try again.");
   }
+}
+
+// ---------------------------------------------------------------------------
+// Recent Searches
+// ---------------------------------------------------------------------------
+const RECENT_SEARCHES_KEY = "cinefind_recent_searches";
+
+function getRecentSearches() {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY)) || [];
+  } catch { return []; }
+}
+
+function saveRecentSearch(query) {
+  const searches = getRecentSearches().filter(s => s !== query);
+  searches.unshift(query);
+  localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(searches.slice(0, 3)));
+}
+
+function renderRecentSearches() {
+  const searches = getRecentSearches();
+  if (searches.length === 0 || DOM.searchInput.value.trim()) {
+    DOM.recentSearches.style.display = "none";
+    return;
+  }
+  DOM.recentSearches.style.display = "block";
+  DOM.recentSearches.innerHTML = `<div class="recent-searches-title">Recent</div>`
+    + searches.map(q => `
+      <div class="recent-search-item" data-query="${q.replace(/"/g, '&quot;')}">
+        <span class="recent-search-text">${q}</span>
+        <button class="recent-search-del" data-query="${q.replace(/"/g, '&quot;')}">✕</button>
+      </div>
+    `).join("");
 }
 
 // ---------------------------------------------------------------------------
@@ -365,13 +569,15 @@ function renderGrid(container, titles) {
     const card = document.createElement("div");
     card.className = "movie-card";
     card.setAttribute("data-id", title.id);
+    if (hiddenPosterIds.has(title.id)) card.classList.add("poster-hidden");
     const posterHtml = title.poster
       ? `<img class="card-poster" src="${title.poster}" alt="${title.name}" loading="lazy">`
       : `<div class="card-poster-placeholder"><span>${title.name}</span></div>`;
     card.innerHTML = `
-      <div class="card-poster-wrapper">
+      <div class="card-poster-wrapper" data-title="${title.name.replace(/"/g, '&quot;')}">
         ${posterHtml}
         <span class="card-media-badge">${title.type === "tv_series" ? "TV" : "Movie"}</span>
+        <button class="card-hide-poster-btn" title="Hide poster">🙈</button>
         <button class="card-save-btn ${saveBtnClass}" data-id="${title.id}" title="Save to Watch List">${saveBtnText}</button>
       </div>
       <div class="card-details">
@@ -392,6 +598,18 @@ function renderGrid(container, titles) {
       if (e.target.classList.contains("card-save-btn")) {
         e.stopPropagation();
         handleQuickSave(title);
+      } else if (e.target.classList.contains("card-hide-poster-btn")) {
+        e.stopPropagation();
+        card.classList.toggle("poster-hidden");
+        if (card.classList.contains("poster-hidden")) {
+          hiddenPosterIds.add(title.id);
+          hiddenPosterNames[title.id] = title.name;
+        } else {
+          hiddenPosterIds.delete(title.id);
+          delete hiddenPosterNames[title.id];
+        }
+        const u = authService.getCurrentUser();
+        if (u) dbService.saveHiddenPosters(u.id, hiddenPosterIds, hiddenPosterNames);
       } else {
         openDetailModal(title.id);
       }
@@ -456,7 +674,7 @@ function renderMyLists() {
   DOM.listsGrid.innerHTML = `<div class="loading-placeholder">Loading saved titles…</div>`;
 
   Promise.all(items.map(item => watchmodeService.getTitleDetails(item.title_id)))
-    .then(titles => renderGrid(DOM.listsGrid, titles))
+    .then(titles => renderGrid(DOM.listsGrid, titles.filter(Boolean)))
     .catch(err => {
       console.error("Failed to render lists:", err);
       DOM.listsGrid.innerHTML = emptyStateHtml("📡", "Could not retrieve your saved titles.");
@@ -476,17 +694,78 @@ function renderProfile() {
     : "Recently";
   DOM.profileJoined.textContent = `Member since: ${joined}`;
 
+  dbService.getProfile(user.id).then(profile => {
+    document.querySelector(".profile-avatar").textContent = profile.avatarEmoji || "👤";
+    renderAvatarPicker(profile.avatarEmoji || "");
+  });
+
   renderDisplayNameOptions(user);
+  renderContentRatingFilter(user);
+  renderHiddenPosters();
   renderProfileReviews();
 }
 
+// ---------------------------------------------------------------------------
+// Content rating filter
+// ---------------------------------------------------------------------------
+const CONTENT_RATING_SEVERITY = {
+  "g":         0, "tv-y":  0, "tv-g":  0,
+  "pg":        1, "tv-pg": 1, "tv-y7": 1, "tv-y7-fv": 1,
+  "pg-13":     2, "tv-14": 2,
+  "r":         3, "tv-ma": 3,
+  "nc-17":     4,
+  "not rated": -1, "unrated": -1, "nr": -1,
+};
+
+function getContentRatingSeverity(rating) {
+  const key = (rating || "").toLowerCase().trim();
+  return CONTENT_RATING_SEVERITY[key] ?? -1; // -1 = unknown/unrated
+}
+
+function applyContentRatingFilter(container, maxLevel) {
+  if (maxLevel === "" || maxLevel === undefined || maxLevel === null) {
+    // No filter — show all
+    container.querySelectorAll("[data-content-rating]").forEach(c => c.style.display = "");
+    return;
+  }
+  const max = parseInt(maxLevel, 10);
+  container.querySelectorAll("[data-content-rating]").forEach(c => {
+    const severity = parseInt(c.getAttribute("data-content-rating"), 10);
+    c.style.display = (severity >= 0 && severity > max) ? "none" : "";
+  });
+}
+
 function renderDisplayNameOptions(user) {
-  const parsed = dbService.parseNameFromEmail(user.email);
+  const local   = (user.email || "").split("@")[0];
+  const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+
+  // Generate all possible substrings as (start, end, text) triples
+  const substrings = [];
+  for (let start = 0; start < local.length; start++) {
+    for (let end = start + 1; end <= local.length; end++) {
+      const text = capitalize(local.slice(start, end));
+      substrings.push({ start: start + 1, end, text }); // 1-indexed for humans
+    }
+  }
+
+  function renderSelectOptions(sel, currentVal) {
+    sel.innerHTML = `<option value="">—</option>`
+      + substrings.map(s => `<option value="${s.text}">Chars ${s.start}–${s.end} → ${s.text}</option>`).join("");
+    // restore if still valid
+    if ([...sel.options].some(o => o.value === currentVal)) sel.value = currentVal;
+    else sel.value = "";
+  }
+
+  const firstNameEl = document.getElementById("select-first-name");
+  const lastNameEl  = document.getElementById("select-last-name");
 
   dbService.getProfile(user.id).then(profile => {
+    renderSelectOptions(firstNameEl, profile.firstName || "");
+    renderSelectOptions(lastNameEl,  profile.lastName  || "");
+
     const modes = [
-      { value: "first_name", label: parsed.first ? `First Name (${parsed.first})` : "First Name" },
-      { value: "last_name",  label: parsed.last  ? `Last Name (${parsed.last})`   : "Last Name" },
+      { value: "first_name", label: "First Name" },
+      { value: "last_name",  label: "Last Name" },
       { value: "anonymous",  label: "Anonymous" },
     ];
 
@@ -496,18 +775,131 @@ function renderDisplayNameOptions(user) {
           ${profile.mode === m.value ? "checked" : ""}>
         <span>${m.label}</span>
       </label>
-    `).join("") + `<div class="name-saved-msg" id="name-saved-msg"></div>`;
+    `).join("");
+
+    function saveDisplaySettings() {
+      const mode = document.querySelector("input[name='display-name']:checked")?.value || "first_name";
+      const fn   = firstNameEl.value;
+      const ln   = lastNameEl.value;
+      dbService.saveProfile(user.id, mode, fn, ln).then(() => {
+        document.getElementById("name-saved-msg").textContent = "Saved!";
+        setTimeout(() => document.getElementById("name-saved-msg").textContent = "", 2000);
+      }).catch(() => {});
+    }
+
+    firstNameEl.addEventListener("change", saveDisplaySettings);
+    lastNameEl.addEventListener("change", saveDisplaySettings);
 
     DOM.displayNameOptions.querySelectorAll("input[name='display-name']").forEach(radio => {
       radio.addEventListener("change", () => {
         DOM.displayNameOptions.querySelectorAll(".name-option").forEach(el => el.classList.remove("selected"));
         radio.closest(".name-option").classList.add("selected");
-        dbService.saveProfile(user.id, radio.value).then(() => {
-          document.getElementById("name-saved-msg").textContent = "Saved!";
-        }).catch(() => {});
+        saveDisplaySettings();
       });
     });
   }).catch(() => {});
+}
+
+function loadContentRatingFilter(userId) {
+  if (!userId) return;
+  const sel = document.getElementById("content-rating-filter");
+  if (!sel) return;
+  dbService.getProfile(userId).then(profile => {
+    const val = profile.maxContentRating ?? "";
+    sel.value = val;
+    // Apply to any visible grids
+    applyContentRatingFilter(DOM.trendingGrid, val);
+    applyContentRatingFilter(DOM.searchResultsGrid, val);
+  }).catch(() => {});
+}
+
+function renderContentRatingFilter(user) {
+  const sel = document.getElementById("content-rating-filter");
+  const savedMsg = document.getElementById("rating-filter-saved");
+
+  dbService.getProfile(user.id).then(profile => {
+    sel.value = profile.maxContentRating ?? "";
+    savedMsg.textContent = "";
+
+    sel.addEventListener("change", () => {
+      const val = sel.value;
+      savedMsg.textContent = "Saving…";
+      // Merge with existing profile so we don't overwrite display name settings
+      dbService.saveProfile(user.id, profile.mode, profile.firstName, profile.lastName, val).then(() => {
+        savedMsg.textContent = "Saved!";
+        setTimeout(() => savedMsg.textContent = "", 2000);
+        // Re-apply filter to visible grids
+        applyContentRatingFilter(DOM.trendingGrid, val);
+        applyContentRatingFilter(DOM.searchResultsGrid, val);
+      }).catch(() => {
+        savedMsg.textContent = "Save failed";
+      });
+    });
+  }).catch(() => {});
+}
+
+const AVATAR_EMOJIS = [
+  "😀","😎","🤩","🥳","😺","😸","😻","🙂","🤗","🤔",
+  "🦊","🐱","🐶","🐼","🐨","🦁","🐯","🐸","🐵","🦄",
+  "🌈","🔥","⭐","🌙","☀️","🌸","🌺","🍕","🍦","🎂",
+  "🎮","🎸","🎧","🎨","📚","🚀","🏀","⚽","🎯","🏆",
+  "💎","🧩","🎪","🎭","💡","🔮","💜","💙","💚","❤️"
+];
+
+function renderAvatarPicker(currentEmoji) {
+  const grid = document.getElementById("emoji-grid");
+  if (!grid) return;
+  grid.innerHTML = AVATAR_EMOJIS.map(e =>
+    `<button class="emoji-option${e === currentEmoji ? " selected" : ""}" data-emoji="${e}">${e}</button>`
+  ).join("");
+}
+
+function renderHiddenPosters() {
+  const container = DOM.profileHiddenPosters;
+  const ids = [...hiddenPosterIds];
+  if (ids.length === 0) {
+    container.innerHTML = `<p class="empty-state-sm">No hidden posters.</p>`;
+    return;
+  }
+
+  // Fetch names for any IDs missing one
+  const needNames = ids.filter(id => !hiddenPosterNames[id]);
+  if (needNames.length > 0) {
+    Promise.all(needNames.map(id =>
+      watchmodeService.getTitleDetails(id).then(d => {
+        if (d && d.name) {
+          hiddenPosterNames[id] = d.name;
+          return { id, name: d.name };
+        }
+      }).catch(() => {})
+    )).then(() => {
+      // Re-render with fetched names
+      const u = authService.getCurrentUser();
+      if (u) dbService.saveHiddenPosters(u.id, hiddenPosterIds, hiddenPosterNames);
+      renderHiddenPosters();
+    });
+  }
+
+  container.innerHTML = ids.map(id => {
+    const name = hiddenPosterNames[id] || `Title ${id}`;
+    return `<button class="hidden-poster-item" data-id="${id}">🙈 ${name}</button>`;
+  }).join("");
+
+  container.querySelectorAll(".hidden-poster-item").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.id;
+      hiddenPosterIds.delete(id);
+      delete hiddenPosterNames[id];
+      const u = authService.getCurrentUser();
+      if (u) dbService.saveHiddenPosters(u.id, hiddenPosterIds, hiddenPosterNames);
+      // Re-render remaining list
+      renderHiddenPosters();
+      // Also unhide any card currently showing this title
+      document.querySelectorAll(`.movie-card[data-id="${id}"]`).forEach(c => {
+        c.classList.remove("poster-hidden");
+      });
+    });
+  });
 }
 
 async function renderProfileReviews() {
@@ -528,7 +920,7 @@ async function renderProfileReviews() {
     DOM.profileReviewsList.innerHTML = reviews.map(rev => `
       <div class="review-card">
         <div class="review-card-header">
-          <span class="review-card-title-name">${rev.title_name}</span>
+          <span class="review-card-title-link" data-title-id="${rev.title_id}" style="cursor:pointer;">${rev.title_name}</span>
           <span class="review-card-stars">${"★".repeat(rev.rating)}${"☆".repeat(5 - rev.rating)}</span>
         </div>
         <div class="review-card-criteria">${(rev.criteria || []).map(c => `<span class="criteria-tag">${c}</span>`).join("") || '<span class="no-criteria">No criteria selected</span>'}</div>
@@ -537,6 +929,10 @@ async function renderProfileReviews() {
           <span>${_formatDate(rev.created_at)}</span>
         </div>
       </div>`).join("");
+    // Click to open detail modal
+    DOM.profileReviewsList.querySelectorAll(".review-card-title-link").forEach(el => {
+      el.addEventListener("click", () => openDetailModal(el.dataset.titleId));
+    });
   } catch (error) {
     console.error("Failed to load profile reviews:", error);
     DOM.profileReviewsList.innerHTML = emptyStateHtml("📡", "Could not load your reviews.");
@@ -552,24 +948,44 @@ async function openDetailModal(titleId) {
   DOM.detailTitle.textContent = "Loading…";
   DOM.detailYear.textContent  = "";
   DOM.detailType.textContent  = "";
+  DOM.detailUsRating.style.display = "none";
   DOM.detailGenres.innerHTML  = "";
   DOM.detailPlot.textContent  = "Fetching details…";
   DOM.detailSourcesList.innerHTML     = `<div class="no-sources-text">Checking availability…</div>`;
   DOM.detailReviewsContainer.innerHTML = "";
+  editingReviewTitleId = null;
   setReviewRating(0);
   document.querySelectorAll("#review-criteria-list input").forEach(cb => cb.checked = false);
   DOM.reviewForm.reset();
+  const editor = document.getElementById("review-editor-block");
+  editor.querySelector("h4").textContent = "Write a Review";
+  const cancelBtn = editor.querySelector(".cancel-edit-btn");
+  if (cancelBtn) cancelBtn.style.display = "none";
+  const submitBtn = editor.querySelector("button[type=submit]");
+  if (submitBtn) submitBtn.textContent = "Submit Review";
   DOM.detailModal.classList.add("active");
 
   try {
     const details  = await watchmodeService.getTitleDetails(titleId);
+    if (!details) {
+      DOM.detailModal.classList.remove("active");
+      showToast("Could not load title details. Please try again.");
+      return;
+    }
     selectedTitle  = details;
 
     DOM.detailPoster.src        = details.poster;
     DOM.detailPoster.alt        = details.name;
+    DOM.detailPoster.style.display = hiddenPosterIds.has(titleId) ? "none" : "";
     DOM.detailTitle.textContent = details.name;
     DOM.detailYear.textContent  = details.year;
     DOM.detailType.textContent  = details.type === "tv_series" ? "TV Series" : "Movie";
+    if (details.us_rating) {
+      DOM.detailUsRating.textContent = details.us_rating;
+      DOM.detailUsRating.style.display = "inline-block";
+    } else {
+      DOM.detailUsRating.style.display = "none";
+    }
     DOM.detailGenres.innerHTML  = (details.genre_names || [])
       .map(g => `<span class="genre-badge">${g}</span>`).join("");
     DOM.detailPlot.textContent  = details.plot_overview || "No description available.";
@@ -670,19 +1086,27 @@ async function renderDetailReviews() {
   }
   const myParsed = dbService.parseNameFromEmail(user?.email || "");
 
-  // Update average rating in header
+  // --- Watchmode rating (yellow stars) ---
+  const wmRating = selectedTitle.user_rating ? Math.round(selectedTitle.user_rating / 2) : 0;
+  const wmClamped = Math.min(5, Math.max(0, wmRating));
+  DOM.detailStarsWatchmode.textContent = wmClamped > 0
+    ? "★".repeat(wmClamped) + "☆".repeat(5 - wmClamped)
+    : "☆☆☆☆☆";
+  DOM.detailRatingWatchmode.textContent = selectedTitle.user_rating
+    ? `${(Number(selectedTitle.user_rating) / 2).toFixed(1)} / 5`
+    : "Not rated";
+
+  // --- CineFind user rating (blue stars) ---
   if (reviews.length > 0) {
     const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
     const avgRounded = Math.min(5, Math.max(0, Math.round(avg)));
-    DOM.detailStarsAvg.textContent      = avgRounded > 0 ? "★".repeat(avgRounded) + "☆".repeat(5 - avgRounded) : "☆☆☆☆☆";
-    DOM.detailRatingAvgText.textContent = `${avg.toFixed(1)} / 5 (${reviews.length} review${reviews.length > 1 ? "s" : ""})`;
+    DOM.detailStarsCinefind.textContent = avgRounded > 0
+      ? "★".repeat(avgRounded) + "☆".repeat(5 - avgRounded)
+      : "☆☆☆☆☆";
+    DOM.detailRatingCinefind.textContent = `${avg.toFixed(1)} / 5 (${reviews.length} review${reviews.length > 1 ? "s" : ""})`;
   } else {
-    const val = selectedTitle.user_rating ? Math.round(selectedTitle.user_rating / 2) : 0;
-    const clamped = Math.min(5, Math.max(1, val));
-    DOM.detailStarsAvg.textContent      = "★".repeat(clamped) + "☆".repeat(5 - clamped);
-    DOM.detailRatingAvgText.textContent = selectedTitle.user_rating
-      ? `${(Number(selectedTitle.user_rating) / 2).toFixed(1)} / 5`
-      : "No ratings yet";
+    DOM.detailStarsCinefind.textContent  = "☆☆☆☆☆";
+    DOM.detailRatingCinefind.textContent = "No reviews yet";
   }
 
   if (!reviews.length) {
@@ -706,8 +1130,95 @@ async function renderDetailReviews() {
           <span>${rev.is_public ? "🌍 Public" : "🔒 Private"}</span>
           <span>${_formatDate(rev.updated_at)}</span>
         </div>
+        ${isOwner ? `
+        <div class="review-actions">
+          <button class="review-btn edit" data-title-id="${selectedTitle.id}" title="Edit review">✏️</button>
+          <button class="review-btn toggle-vis" data-title-id="${selectedTitle.id}" data-current="${rev.is_public ? "1" : "0"}" title="${rev.is_public ? "Make private" : "Make public"}">${rev.is_public ? "🔒" : "🌍"}</button>
+          <button class="review-btn delete" data-title-id="${selectedTitle.id}" title="Delete review">🗑️</button>
+        </div>` : ""}
       </div>`;
   }).join("");
+
+  // Wire up review action buttons
+  DOM.detailReviewsContainer.querySelectorAll(".review-btn.edit").forEach(btn => {
+    btn.addEventListener("click", () => editReview(btn.dataset.titleId));
+  });
+  DOM.detailReviewsContainer.querySelectorAll(".review-btn.toggle-vis").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const tid = btn.dataset.titleId;
+      const makePublic = btn.dataset.current === "0";
+      await dbService.toggleReviewVisibility(user.id, tid, makePublic);
+      await renderDetailReviews();
+    });
+  });
+  DOM.detailReviewsContainer.querySelectorAll(".review-btn.delete").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Delete your review?")) return;
+      await dbService.deleteReview(user.id, btn.dataset.titleId);
+      await renderDetailReviews();
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Review edit mode
+// ---------------------------------------------------------------------------
+let editingReviewTitleId = null;
+const REVIEW_CRITERIA = ["Great plot", "Great characters", "Great acting", "Great visuals", "Great soundtrack", "Great voice acting", "Great for binge-watching", "Good value"];
+
+async function editReview(titleId) {
+  editingReviewTitleId = titleId;
+  const cu = authService.getCurrentUser();
+
+  // Fetch existing review to pre-fill
+  let existing = null;
+  if (cu) {
+    existing = await dbService.getReview(cu.id, titleId);
+  }
+
+  if (existing) {
+    setReviewRating(existing.rating || 0);
+    document.querySelectorAll("#review-criteria-list input").forEach(cb => {
+      cb.checked = (existing.criteria || []).includes(cb.value);
+    });
+    DOM.reviewPublic.checked = existing.is_public !== false;
+  }
+
+  const editor = document.getElementById("review-editor-block");
+  const heading = editor.querySelector("h4");
+  heading.textContent = "Edit Your Review";
+
+  // Change submit button text
+  const submitBtn = editor.querySelector("button[type=submit]");
+  if (submitBtn) submitBtn.textContent = "Update Review";
+
+  // Add/show cancel button
+  let cancelBtn = editor.querySelector(".cancel-edit-btn");
+  if (!cancelBtn) {
+    cancelBtn = document.createElement("button");
+    cancelBtn.className = "btn btn-outline cancel-edit-btn";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.style.marginLeft = "8px";
+    cancelBtn.addEventListener("click", cancelEditReview);
+    (submitBtn || editor.querySelector(".review-rating-input")).after(cancelBtn);
+  }
+  cancelBtn.style.display = "inline-block";
+
+  // Scroll to editor
+  editor.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function cancelEditReview() {
+  editingReviewTitleId = null;
+  setReviewRating(0);
+  document.querySelectorAll("#review-criteria-list input").forEach(cb => cb.checked = false);
+  DOM.reviewPublic.checked = true;
+  const editor = document.getElementById("review-editor-block");
+  editor.querySelector("h4").textContent = "Write a Review";
+  const cancelBtn = editor.querySelector(".cancel-edit-btn");
+  if (cancelBtn) cancelBtn.style.display = "none";
+  const submitBtn = editor.querySelector("button[type=submit]");
+  if (submitBtn) submitBtn.textContent = "Submit Review";
 }
 
 // ---------------------------------------------------------------------------
@@ -743,21 +1254,26 @@ async function handleReviewSubmit(e) {
     await dbService.addReview(
       user.id,
       user.email,
-      selectedTitle.id,
+      editingReviewTitleId || selectedTitle.id,
       selectedTitle.name,
       selectedReviewRating,
       criteria,
       DOM.reviewPublic.checked,
     );
+    editingReviewTitleId = null;
     setReviewRating(0);
     document.querySelectorAll("#review-criteria-list input").forEach(cb => cb.checked = false);
+    const editor = document.getElementById("review-editor-block");
+    editor.querySelector("h4").textContent = "Write a Review";
+    const cancelBtn = editor.querySelector(".cancel-edit-btn");
+    if (cancelBtn) cancelBtn.style.display = "none";
     await renderDetailReviews();
   } catch (error) {
     console.error("Review submit error:", error);
     alert(error.message);
   } finally {
     submitBtn.disabled    = false;
-    submitBtn.textContent = "Submit Review";
+    submitBtn.textContent = editingReviewTitleId ? "Update Review" : "Submit Review";
   }
 }
 

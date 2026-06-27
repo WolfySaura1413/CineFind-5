@@ -77,7 +77,7 @@ export function getLogoForSource(sourceId, fallbackName = "") {
 export const STRINGS = {
   APP_NAME: "CineFind",
   SEARCH_PLACEHOLDER: "Search movies and TV shows...",
-  TRENDING_TITLE: "Trending Now",
+  BROWSE_TITLE: "Browse",
   WATCHLIST_TITLE: "Watch List",
   WATCHED_TITLE: "Watched",
   MY_LISTS_TITLE: "My Lists",
