@@ -598,13 +598,15 @@ async function renderDetailReviews() {
   // Update average rating in header
   if (reviews.length > 0) {
     const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
-    DOM.detailStarsAvg.textContent      = "★".repeat(Math.round(avg)) + "☆".repeat(5 - Math.round(avg));
+    const avgRounded = Math.min(5, Math.max(0, Math.round(avg)));
+    DOM.detailStarsAvg.textContent      = avgRounded > 0 ? "★".repeat(avgRounded) + "☆".repeat(5 - avgRounded) : "☆☆☆☆☆";
     DOM.detailRatingAvgText.textContent = `${avg.toFixed(1)} / 5 (${reviews.length} review${reviews.length > 1 ? "s" : ""})`;
   } else {
-    const val = selectedTitle.user_rating ? Math.round(selectedTitle.user_rating) : 0;
-    DOM.detailStarsAvg.textContent      = val > 0 ? "★".repeat(val) + "☆".repeat(5 - val) : "☆☆☆☆☆";
+    const val = selectedTitle.user_rating ? Math.round(selectedTitle.user_rating / 2) : 0;
+    const clamped = Math.min(5, Math.max(1, val));
+    DOM.detailStarsAvg.textContent      = "★".repeat(clamped) + "☆".repeat(5 - clamped);
     DOM.detailRatingAvgText.textContent = selectedTitle.user_rating
-      ? `${Number(selectedTitle.user_rating).toFixed(1)} / 5`
+      ? `${(Number(selectedTitle.user_rating) / 2).toFixed(1)} / 5`
       : "No ratings yet";
   }
 
