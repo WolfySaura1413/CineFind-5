@@ -40,10 +40,11 @@ const DOM = {
   currentListTab:     "watchlist",
 
   // Profile
-  profileEmail:       document.getElementById("profile-email"),
-  profileJoined:      document.getElementById("profile-joined"),
-  logoutBtn:          document.getElementById("logout-btn"),
-  profileReviewsList: document.getElementById("profile-reviews-list"),
+  profileEmail:        document.getElementById("profile-email"),
+  profileJoined:       document.getElementById("profile-joined"),
+  logoutBtn:           document.getElementById("logout-btn"),
+  profileReviewsList:  document.getElementById("profile-reviews-list"),
+  displayNameOptions:  document.getElementById("display-name-options"),
 
   // Auth Modal
   authModal:         document.getElementById("auth-modal"),
@@ -475,7 +476,63 @@ function renderProfile() {
     : "Recently";
   DOM.profileJoined.textContent = `Member since: ${joined}`;
 
+  renderDisplayNameOptions(user);
   renderProfileReviews();
+}
+
+function renderDisplayNameOptions(user) {
+  const parsed = dbService.parseNameFromEmail(user.email);
+
+  dbService.getProfile(user.id).then(profile => {
+    const modes = [
+      { value: "first_name", label: parsed.first ? `First Name (${parsed.first})` : "First Name" },
+      { value: "last_name",  label: parsed.last  ? `Last Name (${parsed.last})`   : "Last Name" },
+      { value: "nickname",   label: "Custom Nickname" },
+      { value: "anonymous",  label: "Anonymous" },
+    ];
+
+    DOM.displayNameOptions.innerHTML = modes.map(m => `
+      <label class="name-option${profile.mode === m.value ? " selected" : ""}">
+        <input type="radio" name="display-name" value="${m.value}"
+          ${profile.mode === m.value ? "checked" : ""}
+          data-nickname="${m.value === "nickname" ? "1" : "0"}">
+        <span>${m.label}</span>
+      </label>
+    `).join("") + `
+      <div id="nickname-input-wrap" class="nickname-input-wrap${profile.mode === "nickname" ? " visible" : ""}">
+        <input type="text" id="nickname-input" class="input" placeholder="Your nickname..." value="${profile.nickname || parsed.first || ""}" maxlength="30">
+        <button id="save-nickname-btn" class="btn btn-small">Save</button>
+      </div>
+      <div class="name-saved-msg" id="name-saved-msg"></div>`;
+
+    // Radio change → save immediately (except nickname mode needs the text input)
+    DOM.displayNameOptions.querySelectorAll("input[name='display-name']").forEach(radio => {
+      radio.addEventListener("change", () => {
+        const val = radio.value;
+        DOM.displayNameOptions.querySelectorAll(".name-option").forEach(el => el.classList.remove("selected"));
+        radio.closest(".name-option").classList.add("selected");
+        const wrap = document.getElementById("nickname-input-wrap");
+        if (val === "nickname") {
+          wrap.classList.add("visible");
+        } else {
+          wrap.classList.remove("visible");
+          dbService.saveProfile(user.id, val).then(() => {
+            document.getElementById("name-saved-msg").textContent = "Saved!";
+          }).catch(() => {});
+        }
+      });
+    });
+
+    // Save nickname button
+    document.getElementById("save-nickname-btn")?.addEventListener("click", () => {
+      const nick = document.getElementById("nickname-input").value.trim();
+      if (nick) {
+        dbService.saveProfile(user.id, "nickname", nick).then(() => {
+          document.getElementById("name-saved-msg").textContent = "Saved!";
+        }).catch(() => {});
+      }
+    });
+  }).catch(() => {});
 }
 
 async function renderProfileReviews() {
@@ -631,6 +688,13 @@ async function renderDetailReviews() {
   const user    = authService.getCurrentUser();
   const reviews = await dbService.getReviews(selectedTitle.id, user?.id ?? null);
 
+  // Load the current user's display-name preference
+  let myProfile = { mode: "first_name", nickname: "" };
+  if (user) {
+    try { myProfile = await dbService.getProfile(user.id); } catch (_) {}
+  }
+  const myParsed = dbService.parseNameFromEmail(user?.email || "");
+
   // Update average rating in header
   if (reviews.length > 0) {
     const avg = reviews.reduce((s, r) => s + r.rating, 0) / reviews.length;
@@ -653,7 +717,9 @@ async function renderDetailReviews() {
 
   DOM.detailReviewsContainer.innerHTML = reviews.map(rev => {
     const isOwner = user && rev.user_id === user.id;
-    const label   = isOwner ? "You" : (rev.user_email || "Anonymous");
+    const label   = isOwner
+      ? dbService.getDisplayLabel(myProfile, myParsed, rev.user_email)
+      : (rev.user_email || "Anonymous");
     return `
       <div class="review-card">
         <div class="review-card-header">

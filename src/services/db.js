@@ -240,3 +240,71 @@ export async function addReview(userId, userEmail, titleId, titleName, rating, b
     throw new Error("Could not save your review. Please try again.");
   }
 }
+
+// ---------------------------------------------------------------------------
+// Profile — display name preferences
+// Firestore path: users/{uid}/profile
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse user email into first / last name suggestions.
+ * "john.doe@gmail.com" → { first: "John", last: "Doe" }
+ * "jane@gmail.com"     → { first: "Jane", last: "" }
+ */
+export function parseNameFromEmail(email) {
+  if (!email) return { first: "", last: "" };
+  const local = email.split("@")[0];
+  const parts = local.split(".").filter(Boolean);
+  const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  return {
+    first: capitalize(parts[0] || ""),
+    last:  parts.length > 1 ? capitalize(parts.slice(1).join(" ")) : "",
+  };
+}
+
+/**
+ * Load the user's display-name preference from Firestore.
+ * Returns { mode: "first_name"|"last_name"|"nickname"|"anonymous", nickname: "" }
+ * or the default { mode: "first_name", nickname: "" }.
+ */
+export async function getProfile(userId) {
+  if (!userId) return { mode: "first_name", nickname: "" };
+  try {
+    const ref = doc(db, "users", userId, "profile", "settings");
+    const snap = await getDoc(ref);
+    if (snap.exists()) {
+      const d = snap.data();
+      return { mode: d.mode || "first_name", nickname: d.nickname || "" };
+    }
+  } catch (e) {
+    console.warn("getProfile fallback to default:", e);
+  }
+  return { mode: "first_name", nickname: "" };
+}
+
+/**
+ * Save the user's display-name preference to Firestore.
+ */
+export async function saveProfile(userId, mode, nickname = "") {
+  if (!userId) throw new Error("Authentication required.");
+  const ref = doc(db, "users", userId, "profile", "settings");
+  await setDoc(ref, { mode, nickname, updated_at: serverTimestamp() });
+}
+
+/**
+ * Compute the effective display label for a review based on the user's profile.
+ */
+export function getDisplayLabel(profile, parsed, fallbackEmail) {
+  switch (profile.mode) {
+    case "first_name":
+      return parsed.first || fallbackEmail || "User";
+    case "last_name":
+      return parsed.last || parsed.first || fallbackEmail || "User";
+    case "nickname":
+      return profile.nickname || parsed.first || fallbackEmail || "User";
+    case "anonymous":
+      return "Anonymous";
+    default:
+      return parsed.first || fallbackEmail || "User";
+  }
+}

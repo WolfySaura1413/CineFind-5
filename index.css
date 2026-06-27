@@ -637,6 +637,77 @@ body {
   margin-top: 4px;
 }
 
+.profile-section {
+  margin: 20px 0 12px;
+}
+
+.profile-section-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.name-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.name-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.name-option.selected {
+  border-color: var(--primary-color);
+  background: rgba(55, 138, 221, 0.08);
+}
+
+.name-option input[type="radio"] {
+  accent-color: var(--primary-color);
+}
+
+.nickname-input-wrap {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.nickname-input-wrap.visible {
+  display: flex;
+}
+
+.nickname-input-wrap .input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--surface-color);
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.nickname-input-wrap .btn-small {
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.name-saved-msg {
+  font-size: 12px;
+  color: var(--confirmation-color);
+  margin-top: 4px;
+  min-height: 18px;
+}
+
 .profile-reviews-section {
   display: flex;
   flex-direction: column;
