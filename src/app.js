@@ -318,9 +318,11 @@ function renderGrid(container, titles) {
     const isWl = user ? dbService.isInWatchlist(user.id, title.id) : false;
     const isWd = user ? dbService.isInWatched(user.id,   title.id) : false;
 
-    const displayRating = title.user_rating ? Math.min(5, Math.max(1, Math.round(title.user_rating / 2))) : 0;
+    const raw = title.user_rating ? Math.round(Number(title.user_rating) / 2) : 0;
+    const displayRating = Math.min(5, Math.max(0, raw));
+    const emptyStars    = Math.max(0, 5 - displayRating);
     const starsHtml     = displayRating > 0
-      ? "★".repeat(displayRating) + "☆".repeat(5 - displayRating)
+      ? "★".repeat(displayRating) + "☆".repeat(emptyStars)
       : "☆☆☆☆☆";
 
     let saveBtnClass = "", saveBtnText = "+";
