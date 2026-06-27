@@ -1,7 +1,7 @@
 // Watchmode API Service
 
 const BASE_URL = "https://api.watchmode.com/v1/";
-const CACHE_PREFIX = "cinefind_cache_";
+const CACHE_PREFIX = "cinefind_cache_v2_";
 
 // Mock Data for fallback when API keys are not supplied
 const MOCK_TITLES = [
