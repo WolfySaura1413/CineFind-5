@@ -318,7 +318,7 @@ function renderGrid(container, titles) {
     const isWl = user ? dbService.isInWatchlist(user.id, title.id) : false;
     const isWd = user ? dbService.isInWatched(user.id,   title.id) : false;
 
-    const displayRating = title.user_rating ? Math.round(title.user_rating) : 0;
+    const displayRating = title.user_rating ? Math.min(5, Math.max(1, Math.round(title.user_rating / 2))) : 0;
     const starsHtml     = displayRating > 0
       ? "★".repeat(displayRating) + "☆".repeat(5 - displayRating)
       : "☆☆☆☆☆";
